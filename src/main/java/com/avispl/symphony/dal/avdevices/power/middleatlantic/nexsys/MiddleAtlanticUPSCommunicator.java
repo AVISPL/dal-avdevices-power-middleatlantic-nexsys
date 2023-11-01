@@ -24,8 +24,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import org.springframework.util.CollectionUtils;
 
 import javax.security.auth.login.FailedLoginException;
 
@@ -44,6 +45,7 @@ import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.Enum
 import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.OutputSourceEnum;
 import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.SelfTestResultEnum;
 import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.UPSConstant;
+import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.UPSControlCommand;
 import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.UPSMonitoringCommand;
 import com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.UPSPropertiesList;
 import com.avispl.symphony.dal.communicator.SshCommunicator;
@@ -114,6 +116,7 @@ import com.avispl.symphony.dal.util.StringUtils;
  * <li> - Outlet7</li>
  * <li> - Outlet8</li>
  * </ul>
+ *
  *
  * @author Harry / Symphony Dev Team<br>
  * Created on 24/10/2023
@@ -249,7 +252,64 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 */
 	@Override
 	public void controlProperty(ControllableProperty controllableProperty) throws Exception {
+		reentrantLock.lock();
+		try {
+			if (localExtendedStatistics == null) {
+				return;
+			}
+			isEmergencyDelivery = true;
+			Map<String, String> stats = this.localExtendedStatistics.getStatistics();
+			List<AdvancedControllableProperty> advancedControllableProperties = this.localExtendedStatistics.getControllableProperties();
+			String value = String.valueOf(controllableProperty.getValue());
+			String property = controllableProperty.getProperty();
 
+			String[] propertyList = property.split(UPSConstant.HASH);
+			String propertyKey = property;
+			if (property.contains(UPSConstant.HASH)) {
+				propertyKey = propertyList[1];
+			}
+			UPSPropertiesList propertyItem = UPSPropertiesList.getByName(propertyKey);
+			switch (propertyItem) {
+				case OUTLET_STATUS_1:
+				case OUTLET_STATUS_2:
+				case OUTLET_STATUS_3:
+				case OUTLET_STATUS_4:
+				case OUTLET_STATUS_5:
+				case OUTLET_STATUS_6:
+				case OUTLET_STATUS_7:
+				case OUTLET_STATUS_8:
+					sendCommandChangeOutletStatus(propertyKey, value);
+					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, value);
+					break;
+				case OUTLET_CYCLE_1:
+				case OUTLET_CYCLE_2:
+				case OUTLET_CYCLE_3:
+				case OUTLET_CYCLE_4:
+				case OUTLET_CYCLE_5:
+				case OUTLET_CYCLE_6:
+				case OUTLET_CYCLE_7:
+				case OUTLET_CYCLE_8:
+					sendCycleCommand(propertyKey);
+					break;
+				case NEXT_REPLACEMENT_DATE:
+					isDateValid(value);
+					String lastDate = localCacheMapOfPropertyNameAndValue.get(UPSConstant.BATTERY_STATUS_GROUP + LAST_REPLACEMENT_DATE.getName());
+					sendReplacementDateCommand(propertyKey, lastDate, convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE));
+					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, value);
+					break;
+				case LAST_REPLACEMENT_DATE:
+					isDateValid(value);
+					String nextDate = localCacheMapOfPropertyNameAndValue.get(UPSConstant.BATTERY_STATUS_GROUP + NEXT_REPLACEMENT_DATE.getName());
+					sendReplacementDateCommand(propertyKey, convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE), nextDate);
+					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, value);
+					break;
+				default:
+					logger.debug(String.format("Property name %s doesn't support", propertyKey));
+			}
+			updateValueForTheControllableProperty(property, value, stats, advancedControllableProperties);
+		} finally {
+			reentrantLock.unlock();
+		}
 	}
 
 	/**
@@ -257,7 +317,16 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 */
 	@Override
 	public void controlProperties(List<ControllableProperty> controllableProperties) throws Exception {
-
+		if (CollectionUtils.isEmpty(controllableProperties)) {
+			throw new IllegalArgumentException("ControllableProperties can not be null or empty");
+		}
+		for (ControllableProperty p : controllableProperties) {
+			try {
+				controlProperty(p);
+			} catch (Exception e) {
+				logger.error(String.format("Error when control property %s", p.getProperty()), e);
+			}
+		}
 	}
 
 	/**
@@ -311,7 +380,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 */
 	@Override
 	protected boolean doneReading(String command, String response) throws CommandFailureException {
-		if (response.replaceAll("\u0000", "").equals(command)) {
+		if (response.replaceAll("\u0000", UPSConstant.EMPTY).equals(command)) {
 			return true;
 		}
 		return super.doneReading(command, response);
@@ -513,7 +582,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	private void updateLocalCachedValueWithGroupValue(String response, String group) {
 		List<UPSPropertiesList> monitoringProperties = Arrays.stream(UPSPropertiesList.values())
 				.filter(property -> property.getGroup().equals(group)).collect(Collectors.toList());
-		String[] values = splitStringAndReplaceEmpty(response);
+		String[] values = splitResponseValue(response);
 		if (values.length >= monitoringProperties.get(monitoringProperties.size() - 1).getBitIndex()) {
 			for (UPSPropertiesList property : monitoringProperties) {
 				if (property.getBitIndex() != -1) {
@@ -558,7 +627,6 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			if (StringUtils.isNullOrEmpty(response)) {
 				throw new IllegalArgumentException("The response is empty or null");
 			}
-			System.out.println("You received response: " + getResponse(response));
 			return getResponse(response);
 		} catch (FailedLoginException e) {
 			throw new IllegalArgumentException("Another connection has accessed the device.  " + e.getMessage());
@@ -580,9 +648,87 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		int secondTildeIndex = inputString.indexOf("~", firstTildeIndex + 1);
 		int endIndex = inputString.indexOf("\r", secondTildeIndex);
 		if (endIndex == -1) {
-			return "";
+			return UPSConstant.EMPTY;
 		}
 		return inputString.substring(secondTildeIndex, endIndex).trim();
+	}
+
+	/**
+	 * Sends a command to change the status of an outlet and handles the response.
+	 *
+	 * @param propertyName The name of the outlet property.
+	 * @param value The new status value (1 for ON, 0 for OFF).
+	 * @throws IllegalArgumentException If an error occurs while sending the outlet status command or if the request is rejected.
+	 */
+	private void sendCommandChangeOutletStatus(String propertyName, String value) {
+		try {
+			String command = UPSControlCommand.TURN_OFF_COMMAND;
+			if (UPSConstant.NUMBER_ONE.equals(value)) {
+				command = UPSControlCommand.TURN_ON_COMMAND;
+			}
+			command = command.replace("$", propertyName.replace(UPSConstant.OUTLET, UPSConstant.EMPTY));
+			String response = getResponse(sendCommand(command));
+			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
+				throw new IllegalArgumentException("Error when send outlet status command. The request is rejected");
+			}
+		} catch (Exception e) {
+			throw new IllegalArgumentException(String.format("Can't control %s with %s value. ", propertyName, UPSConstant.NUMBER_ONE.equals(value) ? UPSConstant.ON : UPSConstant.OFF) + e.getMessage(), e);
+
+		}
+	}
+
+	/**
+	 * Sends a command to cycle (toggle) the status of an outlet and handles the response.
+	 *
+	 * @param propertyName The name of the outlet property to cycle.
+	 * @throws IllegalArgumentException If an error occurs while sending the outlet cycle command or if the request is rejected.
+	 * @throws InterruptedException If the thread sleep is interrupted.
+	 */
+	private void sendCycleCommand(String propertyName) {
+		try {
+			String command = UPSControlCommand.OUTLET_CYCLE_COMMAND;
+			command = command.replace("$", propertyName.replace(UPSConstant.CYCLE_OUTLET, UPSConstant.EMPTY));
+			String response = getResponse(sendCommand(command));
+			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
+				throw new IllegalArgumentException("Error when send outlet cycle command. The request is rejected");
+			}
+		} catch (Exception e) {
+			throw new IllegalArgumentException(String.format("Can't control %s. ", propertyName) + e.getMessage(), e);
+
+		}
+	}
+
+	/**
+	 * Sends a command to set the replacement date of a specific property and handles the response.
+	 *
+	 * @param propertyName The name of the property for which the replacement date is being set.
+	 * @param lastDate The last replacement date value to be set.
+	 * @param nextDate The next replacement date value to be set.
+	 * @throws IllegalArgumentException If an error occurs while sending the replacement date command or if the request is rejected.
+	 */
+	private void sendReplacementDateCommand(String propertyName, String lastDate, String nextDate) {
+		try {
+			String command = UPSControlCommand.REPLACEMENT_DATE_COMMAND;
+			command = command.replace("$1", lastDate).replace("$2", nextDate);
+			String response = getResponse(sendCommand(command));
+			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
+				throw new IllegalArgumentException("Error when send replacement date command. The request is rejected");
+			}
+		} catch (Exception e) {
+			throw new IllegalArgumentException(String.format("Can't control %s. ", propertyName) + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Update cache device data
+	 *
+	 * @param cacheMapOfPropertyNameAndValue the cacheMapOfPropertyNameAndValue are map key and value of it
+	 * @param property the key is property name
+	 * @param value the value is String value
+	 */
+	private void updateCachedDeviceData(Map<String, String> cacheMapOfPropertyNameAndValue, String property, String value) {
+		cacheMapOfPropertyNameAndValue.remove(property);
+		cacheMapOfPropertyNameAndValue.put(property, value);
 	}
 
 	/**
@@ -591,18 +737,32 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * @param input The input string to be split.
 	 * @return An array of strings obtained after splitting, with empty parts replaced by "None".
 	 */
-	private String[] splitStringAndReplaceEmpty(String input) {
-		String regex = "(?<=;|^)(?=(?:[^;]*;[^;]*)*$)";
-		Pattern pattern = Pattern.compile(regex);
-		String[] parts = pattern.split(input);
-
-		for (int i = 0; i < parts.length; i++) {
-			parts[i] = parts[i].replace(";", UPSConstant.EMPTY);
-			if (parts[i].isEmpty()) {
-				parts[i] = UPSConstant.NONE;
+	private String[] splitResponseValue(String input) {
+		String[] values = input.split(";", -1);
+		for (int i = 0; i < values.length; i++) {
+			if (values[i].isEmpty()) {
+				values[i] = UPSConstant.NONE;
 			}
 		}
-		return parts;
+		return values;
+	}
+
+	/**
+	 * Checks if the input string represents a valid date using a specified date format.
+	 *
+	 * @param input The input string to be validated as a date.
+	 * @return True if the input is a valid date; otherwise, false.
+	 * @throws IllegalArgumentException If the input string is not a valid date in the specified format.
+	 */
+	private boolean isDateValid(String input) {
+		SimpleDateFormat sdf = new SimpleDateFormat(UPSConstant.UI_FORMAT_DATE);
+		sdf.setLenient(false);
+		try {
+			sdf.parse(input);
+			return true;
+		} catch (Exception e) {
+			throw new IllegalArgumentException("The input is invalid");
+		}
 	}
 
 	/**
@@ -750,5 +910,26 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		button.setLabelPressed(labelPressed);
 		button.setGracePeriod(gracePeriod);
 		return new AdvancedControllableProperty(name, new Date(), button, "");
+	}
+
+	/**
+	 * Update the value for the control metric
+	 *
+	 * @param property is name of the metric
+	 * @param value the value is value of properties
+	 * @param extendedStatistics list statistics property
+	 * @param advancedControllableProperties the advancedControllableProperties is list AdvancedControllableProperties
+	 */
+	private void updateValueForTheControllableProperty(String property, String value, Map<String, String> extendedStatistics, List<AdvancedControllableProperty> advancedControllableProperties) {
+		if (!advancedControllableProperties.isEmpty()) {
+			for (AdvancedControllableProperty advancedControllableProperty : advancedControllableProperties) {
+				if (advancedControllableProperty.getName().equals(property)) {
+					extendedStatistics.remove(property);
+					extendedStatistics.put(property, value);
+					advancedControllableProperty.setValue(value);
+					break;
+				}
+			}
+		}
 	}
 }
