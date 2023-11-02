@@ -141,7 +141,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	/**
 	 * Configurable property for historical properties, comma separated values kept as set locally
 	 */
-	private Set<String> historicalProperties = new HashSet<>();
+	private final Set<String> historicalProperties = new HashSet<>();
 
 	/**
 	 * count the failed command

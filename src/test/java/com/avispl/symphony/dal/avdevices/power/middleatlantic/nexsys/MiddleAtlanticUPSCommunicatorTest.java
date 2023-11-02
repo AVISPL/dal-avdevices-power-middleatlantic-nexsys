@@ -1,6 +1,7 @@
 /*
  *  Copyright (c) 2023 AVI-SPL, Inc. All Rights Reserved.
  */
+
 package com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys;
 
 import static com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common.UPSPropertiesList.NEXT_REPLACEMENT_DATE;

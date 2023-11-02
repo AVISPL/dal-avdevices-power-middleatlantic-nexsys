@@ -7,7 +7,7 @@ package com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common;
 /**
  * This enum represents the source of the output in a power system.
  *
- * @author Harru / Symphony Dev Team<br>
+ * @author Harry / Symphony Dev Team<br>
  * Created on 10/21/2023
  * @since 1.0.0
  */
