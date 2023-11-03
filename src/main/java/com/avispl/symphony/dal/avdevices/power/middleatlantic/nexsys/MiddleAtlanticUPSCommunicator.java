@@ -13,6 +13,8 @@ import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.util.CollectionUtils;
@@ -164,6 +168,15 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	private boolean isConfigManagement;
 
 	/**
+	 * the getMultipleStatistics interval if it's fail to send the cmd
+	 */
+	private static final int controlTelnetTimeout = 3000;
+	/**
+	 * Set back to default timeout value in {@link SshCommunicator}
+	 */
+	private static final int statisticsTelnetTimeout = 30000;
+
+	/**
 	 * Retrieves {@link #historicalProperties}
 	 *
 	 * @return value of {@link #historicalProperties}
@@ -219,6 +232,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	public List<Statistics> getMultipleStatistics() throws Exception {
 		reentrantLock.lock();
 		try {
+			this.timeout = controlTelnetTimeout;
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			Map<String, String> stats = new HashMap<>();
 			Map<String, String> dynamic = new HashMap<>();
@@ -243,6 +257,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			isEmergencyDelivery = false;
 		} finally {
 			reentrantLock.unlock();
+			this.timeout = statisticsTelnetTimeout;
 		}
 		return Collections.singletonList(localExtendedStatistics);
 	}
@@ -254,6 +269,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	public void controlProperty(ControllableProperty controllableProperty) throws Exception {
 		reentrantLock.lock();
 		try {
+			this.timeout = controlTelnetTimeout;
 			if (localExtendedStatistics == null) {
 				return;
 			}
@@ -292,16 +308,22 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 					sendCycleCommand(propertyKey);
 					break;
 				case NEXT_REPLACEMENT_DATE:
-					isDateValid(value);
+					if (!isDateValid(value)) {
+						throw new IllegalArgumentException("The input is invalid");
+					}
 					String lastDate = localCacheMapOfPropertyNameAndValue.get(UPSConstant.BATTERY_STATUS_GROUP + LAST_REPLACEMENT_DATE.getName());
-					sendReplacementDateCommand(propertyKey, lastDate, convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE));
-					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, value);
+					String nextDate = convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE);
+					sendReplacementDateCommand(propertyKey, lastDate, nextDate);
+					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, nextDate);
 					break;
 				case LAST_REPLACEMENT_DATE:
-					isDateValid(value);
-					String nextDate = localCacheMapOfPropertyNameAndValue.get(UPSConstant.BATTERY_STATUS_GROUP + NEXT_REPLACEMENT_DATE.getName());
-					sendReplacementDateCommand(propertyKey, convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE), nextDate);
-					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, value);
+					if (!isDateValid(value)) {
+						throw new IllegalArgumentException("The input is invalid");
+					}
+					nextDate = localCacheMapOfPropertyNameAndValue.get(UPSConstant.BATTERY_STATUS_GROUP + NEXT_REPLACEMENT_DATE.getName());
+					lastDate = convertDateFormat(value, UPSConstant.UI_FORMAT_DATE, UPSConstant.COMMAND_FORMAT_DATE);
+					sendReplacementDateCommand(propertyKey, lastDate, nextDate);
+					updateCachedDeviceData(localCacheMapOfPropertyNameAndValue, property, lastDate);
 					break;
 				default:
 					logger.debug(String.format("Property name %s doesn't support", propertyKey));
@@ -309,6 +331,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			updateValueForTheControllableProperty(property, value, stats, advancedControllableProperties);
 		} finally {
 			reentrantLock.unlock();
+			this.timeout = statisticsTelnetTimeout;
 		}
 	}
 
@@ -516,8 +539,8 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		localCacheMapOfPropertyNameAndValue.clear();
 		for (UPSMonitoringCommand command : UPSMonitoringCommand.values()) {
 			response = sendCommand(command.getCommand());
-			if (StringUtils.isNotNullOrEmpty(response) && response.length() > 7) {
-				response = response.substring(7);
+			if (StringUtils.isNotNullOrEmpty(response) && response.length() > UPSConstant.LENGTH_OF_BIT_DATA) {
+				response = response.substring(UPSConstant.LENGTH_OF_BIT_DATA);
 				switch (command) {
 					case INPUT_STATE:
 						updateLocalCachedValueWithGroupValue(response, UPSConstant.INPUT_STATUS_GROUP);
@@ -691,6 +714,8 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			String response = getResponse(sendCommand(command));
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet cycle command. The request is rejected");
+			} else{
+				Thread.sleep(10000);
 			}
 		} catch (Exception e) {
 			throw new IllegalArgumentException(String.format("Can't control %s. ", propertyName) + e.getMessage(), e);
@@ -755,14 +780,20 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * @throws IllegalArgumentException If the input string is not a valid date in the specified format.
 	 */
 	private boolean isDateValid(String input) {
-		SimpleDateFormat sdf = new SimpleDateFormat(UPSConstant.UI_FORMAT_DATE);
-		sdf.setLenient(false);
-		try {
-			sdf.parse(input);
+		String regex = "^(0[1-9]|1[0-2])/(0[1-9]|[1-2][0-9]|3[0-1])/\\d{4}$";
+		Pattern pattern = Pattern.compile(regex);
+		Matcher matcher = pattern.matcher(input);
+		if (matcher.matches()) {
+			DateFormat sdf = new SimpleDateFormat("MM/dd/yyyy");
+			sdf.setLenient(false);
+			try {
+				sdf.parse(input);
+			} catch (ParseException e) {
+				return false;
+			}
 			return true;
-		} catch (Exception e) {
-			throw new IllegalArgumentException("The input is invalid");
 		}
+		return false;
 	}
 
 	/**

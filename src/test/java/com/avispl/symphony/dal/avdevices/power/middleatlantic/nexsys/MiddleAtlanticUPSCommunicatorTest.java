@@ -34,7 +34,6 @@ public class MiddleAtlanticUPSCommunicatorTest {
 	@BeforeEach()
 	public void setUp() throws Exception {
 		middleAtlanticUPSCommunicator = new MiddleAtlanticUPSCommunicator();
-		//  ToDo: comment out controlling capabilities and config management
 		middleAtlanticUPSCommunicator.setHost("");
 		middleAtlanticUPSCommunicator.setPort(22);
 		middleAtlanticUPSCommunicator.setLogin("");

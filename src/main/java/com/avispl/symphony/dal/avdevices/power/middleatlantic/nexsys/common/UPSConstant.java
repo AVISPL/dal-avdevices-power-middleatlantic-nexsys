@@ -32,4 +32,5 @@ public class UPSConstant {
 	public static final String CYCLE = "Cycle";
 	public static final String CYCLING = "Cycling";
 	public static final String FAIL_RESPONSE = "~OOR";
+	public static final int LENGTH_OF_BIT_DATA = 7;
 }
