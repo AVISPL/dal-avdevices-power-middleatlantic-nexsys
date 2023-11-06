@@ -690,13 +690,12 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 				command = UPSControlCommand.TURN_ON_COMMAND;
 			}
 			command = command.replace("$", propertyName.replace(UPSConstant.OUTLET, UPSConstant.EMPTY));
-			String response = getResponse(sendCommand(command));
+			String response = sendCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet status command. The request is rejected");
 			}
 		} catch (Exception e) {
 			throw new IllegalArgumentException(String.format("Can't control %s with %s value. ", propertyName, UPSConstant.NUMBER_ONE.equals(value) ? UPSConstant.ON : UPSConstant.OFF) + e.getMessage(), e);
-
 		}
 	}
 
@@ -711,13 +710,12 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		try {
 			String command = UPSControlCommand.OUTLET_CYCLE_COMMAND;
 			command = command.replace("$", propertyName.replace(UPSConstant.CYCLE_OUTLET, UPSConstant.EMPTY));
-			String response = getResponse(sendCommand(command));
+			String response = sendCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet cycle command. The request is rejected");
 			}
 		} catch (Exception e) {
 			throw new IllegalArgumentException(String.format("Can't control %s. ", propertyName) + e.getMessage(), e);
-
 		}
 	}
 
@@ -733,7 +731,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		try {
 			String command = UPSControlCommand.REPLACEMENT_DATE_COMMAND;
 			command = command.replace("$1", lastDate).replace("$2", nextDate);
-			String response = getResponse(sendCommand(command));
+			String response = sendCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send replacement date command. The request is rejected");
 			}
