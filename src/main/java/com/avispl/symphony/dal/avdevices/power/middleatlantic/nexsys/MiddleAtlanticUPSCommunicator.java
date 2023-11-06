@@ -784,7 +784,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		Pattern pattern = Pattern.compile(regex);
 		Matcher matcher = pattern.matcher(input);
 		if (matcher.matches()) {
-			DateFormat sdf = new SimpleDateFormat("MM/dd/yyyy");
+			DateFormat sdf = new SimpleDateFormat(UPSConstant.UI_FORMAT_DATE);
 			sdf.setLenient(false);
 			try {
 				sdf.parse(input);
