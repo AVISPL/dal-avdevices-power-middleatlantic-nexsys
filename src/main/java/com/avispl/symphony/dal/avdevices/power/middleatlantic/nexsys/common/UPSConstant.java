@@ -19,7 +19,7 @@ public class UPSConstant {
 	public static final String BATTERY_STATUS_GROUP = "BatteryStatus#";
 	public static final String EMPTY = "";
 	public static final String NONE = "None";
-	public static final int GRACE_PERIOD = 0;
+	public static final long GRACE_PERIOD = 10;
 	public static final String HASH = "#";
 	public static final String OUTLET = "Outlet";
 	public static final String CYCLE_OUTLET = "CycleOutlet";

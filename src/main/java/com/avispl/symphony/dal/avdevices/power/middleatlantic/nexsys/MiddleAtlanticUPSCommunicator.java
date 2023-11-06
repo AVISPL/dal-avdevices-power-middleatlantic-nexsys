@@ -714,8 +714,6 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			String response = getResponse(sendCommand(command));
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet cycle command. The request is rejected");
-			} else{
-				Thread.sleep(10000);
 			}
 		} catch (Exception e) {
 			throw new IllegalArgumentException(String.format("Can't control %s. ", propertyName) + e.getMessage(), e);
