@@ -14,6 +14,6 @@ package com.avispl.symphony.dal.avdevices.power.middleatlantic.nexsys.common;
 public class UPSControlCommand {
 	public static final String TURN_ON_COMMAND = "~00S006RON$;2";
 	public static final String TURN_OFF_COMMAND = "~00S006ROF$;2";
-	public static final String OUTLET_CYCLE_COMMAND ="~00S009RSC$;5;10";
+	public static final String OUTLET_CYCLE_COMMAND ="~00S009RSC$;3;10";
 	public static final String REPLACEMENT_DATE_COMMAND = "~00S020BRD$1;$2";
 }

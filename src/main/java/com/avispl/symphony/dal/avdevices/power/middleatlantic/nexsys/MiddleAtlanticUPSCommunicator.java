@@ -496,7 +496,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 				case LAST_REPLACEMENT_DATE:
 				case NEXT_REPLACEMENT_DATE:
 					value = convertDateFormat(value, UPSConstant.COMMAND_FORMAT_DATE, UPSConstant.UI_FORMAT_DATE);
-					addAdvanceControlProperties(advancedControllableProperties, controlStats, createText(propertyName, value), value);
+					addAdvancedControlProperties(advancedControllableProperties, controlStats, createText(propertyName, value), value);
 					break;
 				case OUTLET_STATUS_1:
 				case OUTLET_STATUS_2:
@@ -509,7 +509,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 					if (UPSConstant.NONE.equals(value)) {
 						stats.put(propertyName, value);
 					} else {
-						addAdvanceControlProperties(advancedControllableProperties, controlStats, createSwitch(propertyName, Integer.parseInt(value), UPSConstant.OFF, UPSConstant.ON),
+						addAdvancedControlProperties(advancedControllableProperties, controlStats, createSwitch(propertyName, Integer.parseInt(value), UPSConstant.OFF, UPSConstant.ON),
 								UPSConstant.NUMBER_ONE.equals(value) ? UPSConstant.ON : UPSConstant.OFF);
 					}
 					break;
@@ -521,7 +521,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 				case OUTLET_CYCLE_6:
 				case OUTLET_CYCLE_7:
 				case OUTLET_CYCLE_8:
-					addAdvanceControlProperties(advancedControllableProperties, controlStats, createButton(propertyName, UPSConstant.CYCLE, UPSConstant.CYCLING, UPSConstant.GRACE_PERIOD), value);
+					addAdvancedControlProperties(advancedControllableProperties, controlStats, createButton(propertyName, UPSConstant.CYCLE, UPSConstant.CYCLING, UPSConstant.GRACE_PERIOD), value);
 					break;
 				default:
 					stats.put(propertyName, value);
@@ -534,7 +534,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * Retrieves monitoring data from the UPS (Uninterruptible Power Supply) system by sending a series of commands and
 	 * updates the local cache with the received data.
 	 */
-	private void retrieveMonitoringData() {
+	private void retrieveMonitoringData() throws Exception {
 		String response;
 		localCacheMapOfPropertyNameAndValue.clear();
 		for (UPSMonitoringCommand command : UPSMonitoringCommand.values()) {
@@ -644,7 +644,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * @throws IllegalArgumentException If the response is empty or null.
 	 * @throws FailedLoginException If another connection has accessed the device.
 	 */
-	private String sendCommand(String command) {
+	private String sendCommand(String command) throws Exception {
 		try {
 			String response = this.send(command + "\r");
 			if (StringUtils.isNullOrEmpty(response)) {
@@ -652,7 +652,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			}
 			return getResponse(response);
 		} catch (FailedLoginException e) {
-			throw new IllegalArgumentException("Another connection has accessed the device.  " + e.getMessage());
+			throw new FailedLoginException("Another connection has accessed the device.  " + e.getMessage());
 		} catch (Exception e) {
 			failedMonitor.put(command, e.getMessage());
 			logger.error("Error when retrieve command " + e.getMessage(), e);
@@ -704,7 +704,6 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 *
 	 * @param propertyName The name of the outlet property to cycle.
 	 * @throws IllegalArgumentException If an error occurs while sending the outlet cycle command or if the request is rejected.
-	 * @throws InterruptedException If the thread sleep is interrupted.
 	 */
 	private void sendCycleCommand(String propertyName) {
 		try {
@@ -748,7 +747,6 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * @param value the value is String value
 	 */
 	private void updateCachedDeviceData(Map<String, String> cacheMapOfPropertyNameAndValue, String property, String value) {
-		cacheMapOfPropertyNameAndValue.remove(property);
 		cacheMapOfPropertyNameAndValue.put(property, value);
 	}
 
@@ -872,7 +870,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 * @return String response
 	 * @throws IllegalStateException when exception occur
 	 */
-	private void addAdvanceControlProperties(List<AdvancedControllableProperty> advancedControllableProperties, Map<String, String> stats, AdvancedControllableProperty property, String value) {
+	private void addAdvancedControlProperties(List<AdvancedControllableProperty> advancedControllableProperties, Map<String, String> stats, AdvancedControllableProperty property, String value) {
 		if (property != null) {
 			for (AdvancedControllableProperty controllableProperty : advancedControllableProperties) {
 				if (controllableProperty.getName().equals(property.getName())) {
