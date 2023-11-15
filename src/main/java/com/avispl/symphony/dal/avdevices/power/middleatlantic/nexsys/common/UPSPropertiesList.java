@@ -28,6 +28,9 @@ public enum UPSPropertiesList {
 	OUTPUT_POWER("Power(W)", UPSConstant.OUTPUT_STATUS_GROUP, 5),
 	OUTPUT_LOAD("Load(%)", UPSConstant.OUTPUT_STATUS_GROUP, 6),
 
+	LAST_SELF_TEST_RESULTS("LastSelfTestResults", UPSConstant.BATTERY_STATUS_GROUP, -1),
+	LAST_REPLACEMENT_DATE("LastReplacementDate(MM/DD/YYYY)", UPSConstant.BATTERY_STATUS_GROUP, -1),
+	NEXT_REPLACEMENT_DATE("NextReplacementDate(MM/DD/YYYY)", UPSConstant.BATTERY_STATUS_GROUP, -1),
 	CONDITION("Condition", UPSConstant.BATTERY_STATUS_GROUP, 0),
 	STATUS("Status", UPSConstant.BATTERY_STATUS_GROUP, 1),
 	CHARGE("Charge", UPSConstant.BATTERY_STATUS_GROUP, 2),
@@ -38,9 +41,6 @@ public enum UPSPropertiesList {
 	CAPACITY("Capacity(%)", UPSConstant.BATTERY_STATUS_GROUP, 9),
 	NUMBER_EXTERNAL_BATTERY_PACK("ExternalBatteryPackCount", UPSConstant.BATTERY_STATUS_GROUP, 10),
 	LOW_LIMIT("LowLimit(%)", UPSConstant.BATTERY_STATUS_GROUP, 17),
-	LAST_SELF_TEST_RESULTS("LastSelfTestResults", UPSConstant.BATTERY_STATUS_GROUP, -1),
-	LAST_REPLACEMENT_DATE("LastReplacementDate(MM/DD/YYYY)", UPSConstant.BATTERY_STATUS_GROUP, -1),
-	NEXT_REPLACEMENT_DATE("NextReplacementDate(MM/DD/YYYY)", UPSConstant.BATTERY_STATUS_GROUP, -1),
 
 	NUMBER_OF_OUTLETS("NumberOfOutlets", UPSConstant.EMPTY, -1),
 	FIRMWARE_VERSION("FirmwareVersion", UPSConstant.EMPTY, -1),
