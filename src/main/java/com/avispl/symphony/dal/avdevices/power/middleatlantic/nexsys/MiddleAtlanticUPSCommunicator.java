@@ -170,11 +170,11 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	/**
 	 * the getMultipleStatistics interval if it's fail to send the cmd
 	 */
-	private static final int controlTelnetTimeout = 3000;
+	private static final int controlSSHTimeout = 3000;
 	/**
 	 * Set back to default timeout value in {@link SshCommunicator}
 	 */
-	private static final int statisticsTelnetTimeout = 30000;
+	private static final int statisticsSSHTimeout = 30000;
 
 	/**
 	 * Retrieves {@link #historicalProperties}
@@ -232,7 +232,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	public List<Statistics> getMultipleStatistics() throws Exception {
 		reentrantLock.lock();
 		try {
-			this.timeout = controlTelnetTimeout;
+			this.timeout = controlSSHTimeout;
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			Map<String, String> stats = new HashMap<>();
 			Map<String, String> dynamic = new HashMap<>();
@@ -257,7 +257,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			isEmergencyDelivery = false;
 		} finally {
 			reentrantLock.unlock();
-			this.timeout = statisticsTelnetTimeout;
+			this.timeout = statisticsSSHTimeout;
 		}
 		return Collections.singletonList(localExtendedStatistics);
 	}
@@ -269,7 +269,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	public void controlProperty(ControllableProperty controllableProperty) throws Exception {
 		reentrantLock.lock();
 		try {
-			this.timeout = controlTelnetTimeout;
+			this.timeout = controlSSHTimeout;
 			if (localExtendedStatistics == null) {
 				return;
 			}
@@ -331,7 +331,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 			updateValueForTheControllableProperty(property, value, stats, advancedControllableProperties);
 		} finally {
 			reentrantLock.unlock();
-			this.timeout = statisticsTelnetTimeout;
+			this.timeout = statisticsSSHTimeout;
 		}
 	}
 
@@ -417,7 +417,6 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		if (logger.isDebugEnabled()) {
 			logger.debug("Internal init is called.");
 		}
-		this.createChannel();
 		super.internalInit();
 	}
 
@@ -536,9 +535,11 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 */
 	private void retrieveMonitoringData() throws Exception {
 		String response;
-		localCacheMapOfPropertyNameAndValue.clear();
 		for (UPSMonitoringCommand command : UPSMonitoringCommand.values()) {
 			response = sendCommand(command.getCommand());
+			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
+				return;
+			}
 			if (StringUtils.isNotNullOrEmpty(response) && response.length() > UPSConstant.LENGTH_OF_BIT_DATA) {
 				response = response.substring(UPSConstant.LENGTH_OF_BIT_DATA);
 				switch (command) {
@@ -646,17 +647,60 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 	 */
 	private String sendCommand(String command) throws Exception {
 		try {
+			return sendWithRetryOnUnauthorized(command, true);
+		} catch (FailedLoginException e) {
+			return UPSConstant.FAIL_LOGIN;
+		} catch (Exception ex) {
+			failedMonitor.put(command, ex.getMessage());
+			logger.error("Error when retrieve command " + ex.getMessage(), ex);
+			return UPSConstant.EMPTY;
+		}
+	}
+
+	/**
+	 * Sends a command to a remote device and optionally retries in case of unauthorized access.
+	 *
+	 * @param command The command to be sent to the remote device.
+	 * @param retryOnUnauthorized If true, the method will retry after a 10-second sleep if an Unauthorized Access (FailedLoginException) occurs.
+	 * @return The response from the remote device after sending the command.
+	 * @throws Exception If an exception occurs during the communication with the remote device or if the response is empty or null.
+	 * @throws FailedLoginException If an Unauthorized Access (FailedLoginException) occurs and the retryOnUnauthorized parameter is set to false.
+	 *         In this case, it may indicate another connection accessing the device or a specific error message from the exception.
+	 */
+	private String sendWithRetryOnUnauthorized(String command, boolean retryOnUnauthorized) throws Exception {
+		try {
 			String response = this.send(command + "\r");
 			if (StringUtils.isNullOrEmpty(response)) {
 				throw new IllegalArgumentException("The response is empty or null");
 			}
 			return getResponse(response);
 		} catch (FailedLoginException e) {
-			throw new FailedLoginException("Another connection has accessed the device.  " + e.getMessage());
+			if (retryOnUnauthorized) {
+				//Sleep thread 10seconds to clear cached with the connection
+				Thread.sleep(10000);
+				return sendWithRetryOnUnauthorized(command, false);
+			} else {
+				throw new FailedLoginException("Another connection has accessed the device or " + e.getMessage());
+			}
+		}
+	}
+
+	/**
+	 * Sends a command to the UPS (Uninterruptible Power Supply) device and retrieves the response.
+	 *
+	 * @param command The command to be sent to the device.
+	 * @return The response received from the device.
+	 * @throws IllegalArgumentException If the response is empty or null.
+	 */
+	private String sendControlCommand(String command) throws Exception {
+		try {
+			String response = this.send(command + "\r");
+			if (StringUtils.isNullOrEmpty(response)) {
+				throw new IllegalArgumentException("The response is empty or null");
+			}
+			return getResponse(response);
 		} catch (Exception e) {
-			failedMonitor.put(command, e.getMessage());
-			logger.error("Error when retrieve command " + e.getMessage(), e);
-			return UPSConstant.EMPTY;
+			throw new IllegalArgumentException("Error while send control command" + e.getMessage());
 		}
 	}
 
@@ -690,7 +734,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 				command = UPSControlCommand.TURN_ON_COMMAND;
 			}
 			command = command.replace("$", propertyName.replace(UPSConstant.OUTLET, UPSConstant.EMPTY));
-			String response = sendCommand(command);
+			String response = sendControlCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet status command. The request is rejected");
 			}
@@ -709,7 +753,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		try {
 			String command = UPSControlCommand.OUTLET_CYCLE_COMMAND;
 			command = command.replace("$", propertyName.replace(UPSConstant.CYCLE_OUTLET, UPSConstant.EMPTY));
-			String response = sendCommand(command);
+			String response = sendControlCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send outlet cycle command. The request is rejected");
 			}
@@ -730,7 +774,7 @@ public class MiddleAtlanticUPSCommunicator extends SshCommunicator implements Mo
 		try {
 			String command = UPSControlCommand.REPLACEMENT_DATE_COMMAND;
 			command = command.replace("$1", lastDate).replace("$2", nextDate);
-			String response = sendCommand(command);
+			String response = sendControlCommand(command);
 			if (UPSConstant.FAIL_RESPONSE.equals(response)) {
 				throw new IllegalArgumentException("Error when send replacement date command. The request is rejected");
 			}

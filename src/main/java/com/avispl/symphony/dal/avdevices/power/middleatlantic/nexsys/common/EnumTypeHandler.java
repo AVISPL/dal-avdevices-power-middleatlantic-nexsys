@@ -77,7 +77,7 @@ public class EnumTypeHandler {
 					return methodName.invoke(metric).toString();
 				}
 			}
-			throw new ResourceNotReachableException("Fail to get enum " + enumType.getSimpleName() + " with value is " + value);
+			return UPSConstant.NONE;
 		} catch (Exception e) {
 			throw new ResourceNotReachableException(e.getMessage(), e);
 		}
