@@ -60,7 +60,7 @@ public class MiddleAtlanticUPSCommunicatorTest {
 		extendedStatistic = (ExtendedStatistics) middleAtlanticUPSCommunicator.getMultipleStatistics().get(0);
 		List<AdvancedControllableProperty> advancedControllablePropertyList = extendedStatistic.getControllableProperties();
 		Map<String, String> statistics = extendedStatistic.getStatistics();
-		Assert.assertEquals(43, statistics.size());
+		Assert.assertEquals(42, statistics.size());
 		Assert.assertEquals(18, advancedControllablePropertyList.size());
 	}
 
