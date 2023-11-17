@@ -73,7 +73,6 @@ import com.avispl.symphony.dal.util.StringUtils;
  * <li> - ExternalBatteryPackCount</li>
  * <li> - LastReplacementDate(MM/DD/YYYY)</li>
  * <li> - LastSelfTestResults</li>
- * <li> - LowLimit(%)</li>
  * <li> - NextReplacementDate(MM/DD/YYYY)</li>
  * <li> - OnBatteryTime(second)</li>
  * <li> - RemainingTime</li>

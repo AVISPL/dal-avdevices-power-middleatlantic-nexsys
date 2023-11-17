@@ -40,7 +40,6 @@ public enum UPSPropertiesList {
 	TEMPERATURE("Temperature(C)", UPSConstant.BATTERY_STATUS_GROUP, 8),
 	CAPACITY("Capacity(%)", UPSConstant.BATTERY_STATUS_GROUP, 9),
 	NUMBER_EXTERNAL_BATTERY_PACK("ExternalBatteryPackCount", UPSConstant.BATTERY_STATUS_GROUP, 10),
-	LOW_LIMIT("LowLimit(%)", UPSConstant.BATTERY_STATUS_GROUP, 17),
 
 	NUMBER_OF_OUTLETS("NumberOfOutlets", UPSConstant.EMPTY, -1),
 	FIRMWARE_VERSION("FirmwareVersion", UPSConstant.EMPTY, -1),
